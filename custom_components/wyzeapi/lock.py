@@ -22,7 +22,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers import device_registry as dr
 from homeassistant.exceptions import HomeAssistantError
 
-from .const import CONF_CLIENT, DOMAIN, LOCK_UPDATED
+from .const import CONF_CLIENT, DOMAIN, LOCK_UPDATED, LOCK_MODELS_BLE, LOCK_MODELS_REST
 from .token_manager import token_exception_handler
 
 _LOGGER = logging.getLogger(__name__)
@@ -46,20 +46,38 @@ async def async_setup_entry(
     :return:
     """
 
-    _LOGGER.debug("""Creating new WyzeApi lock component""")
+    _LOGGER.debug("Creating new WyzeApi lock component")
     client: Wyzeapy = hass.data[DOMAIN][config_entry.entry_id][CONF_CLIENT]
     lock_service = await client.lock_service
 
     all_locks = await lock_service.get_locks()
+    _LOGGER.info(f"Found {len(all_locks)} lock(s) in Wyze account")
 
-    locks = [WyzeLock(lock_service, lock) for lock in all_locks
-             if lock.product_model != "YD_BT1"]
+    locks = []
     lock_bolts = []
+
     for lock in all_locks:
-        if lock.product_model == "YD_BT1":
+        model = lock.product_model
+        _LOGGER.info(f"Processing lock: {lock.nickname} (MAC: {lock.mac}, Model: {model})")
+
+        if model in LOCK_MODELS_BLE:
+            # BLE lock (Lock Bolt)
+            _LOGGER.debug(f"Lock {lock.nickname} is a BLE lock (model: {model}), using WyzeLockBolt class")
             coordinator = hass.data[DOMAIN][config_entry.entry_id]["coordinators"][lock.mac]
             lock_bolts.append(WyzeLockBolt(coordinator))
+        elif model in LOCK_MODELS_REST:
+            # Known REST API lock
+            _LOGGER.debug(f"Lock {lock.nickname} is a REST API lock (model: {model}), using WyzeLock class")
+            locks.append(WyzeLock(lock_service, lock))
+        else:
+            # Unknown model - treat as REST API lock for backward compatibility
+            _LOGGER.warning(
+                f"Lock {lock.nickname} has unknown model '{model}'. "
+                f"Treating as REST API lock. Known models: BLE={LOCK_MODELS_BLE}, REST={LOCK_MODELS_REST}"
+            )
+            locks.append(WyzeLock(lock_service, lock))
 
+    _LOGGER.info(f"Setting up {len(locks)} REST API lock(s) and {len(lock_bolts)} BLE lock(s)")
     async_add_entities(locks + lock_bolts, True)
 
 
@@ -75,6 +93,7 @@ class WyzeLock(homeassistant.components.lock.LockEntity, ABC):
         self._lock_service = lock_service
 
         self._out_of_sync_count = 0
+        _LOGGER.debug(f"Initialized WyzeLock for {lock.nickname} (Model: {lock.product_model})")
 
     @property
     def device_info(self):
@@ -210,6 +229,7 @@ class WyzeLockBolt(CoordinatorEntity, homeassistant.components.lock.LockEntity):
     def __init__(self, coordinator):
         super().__init__(coordinator)
         self._lock = coordinator._lock
+        _LOGGER.debug(f"Initialized WyzeLockBolt for {self._lock.nickname} (Model: {self._lock.product_model})")
 
     @property
     def name(self):

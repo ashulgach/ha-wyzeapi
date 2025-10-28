@@ -188,8 +188,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def setup_coordinators(hass: HomeAssistant, config_entry: ConfigEntry, client: Wyzeapy):
     lock_service = await client.lock_service
-    for lock in await lock_service.get_locks():
+    all_locks = await lock_service.get_locks()
+    _LOGGER.debug(f"Setting up coordinators for {len(all_locks)} lock(s)")
+
+    for lock in all_locks:
         if lock.product_model == "YD_BT1":
+            _LOGGER.info(f"Setting up BLE coordinator for lock: {lock.nickname} (MAC: {lock.mac})")
             coordinators = hass.data[DOMAIN][config_entry.entry_id].setdefault("coordinators", {})
             coordinators[lock.mac] = WyzeLockBoltCoordinator(hass, lock_service, lock)
             await coordinators[lock.mac].update_lock_info()
+            _LOGGER.debug(f"BLE coordinator setup complete for {lock.nickname}")

@@ -70,7 +70,9 @@ async def async_setup_entry(
 
     locks = await lock_service.get_locks()
     sensors = []
+    _LOGGER.debug(f"Creating battery sensors for {len(locks)} lock(s)")
     for lock in locks:
+        _LOGGER.debug(f"Creating battery sensors for lock: {lock.nickname} (Model: {lock.product_model})")
         sensors.append(WyzeLockBatterySensor(lock, WyzeLockBatterySensor.LOCK_BATTERY))
         sensors.append(
             WyzeLockBatterySensor(lock, WyzeLockBatterySensor.KEYPAD_BATTERY)

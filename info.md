@@ -15,7 +15,7 @@ note this mimics the Wyze app and therefore access may be cut off at anytime.
 * Control Wyze Plugs as switches through HA
 * Use Wyze Cameras as motion sensors
 * Turn on and off Wyze Cameras
-* Lock, unlock, and view status of lock and door for the Wyze Lock
+* Lock, unlock, and view status of the Wyze Lock and Wyze Palm Lock (WPLCK1)
 
 ## Support
 

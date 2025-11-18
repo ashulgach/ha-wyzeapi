@@ -18,7 +18,7 @@ note this mimics the Wyze app and therefore access may be cut off at anytime.
 * Control Wyze Plugs as switches through HA
 * Use Wyze Cameras as motion sensors **NOTE:** Disabled following API usage incident with Wyze
 * Turn on and off Wyze Cameras
-* Lock, unlock, and view status of lock and door for the Wyze Lock
+* Lock, unlock, and view status of the Wyze Lock and Wyze Palm Lock (WPLCK1)
 
 ### Potential Downsides
 
@@ -84,4 +84,3 @@ If you need help with anything then please connect with the community!
 2. Restart HA
 3. Verify you're still having the issue
 4. File an issue in this Github Repository (being sure to fill out every provided field)
-

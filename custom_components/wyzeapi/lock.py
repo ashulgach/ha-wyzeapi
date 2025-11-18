@@ -29,6 +29,7 @@ _LOGGER = logging.getLogger(__name__)
 ATTRIBUTION = "Data provided by Wyze"
 SCAN_INTERVAL = timedelta(seconds=10)
 MAX_OUT_OF_SYNC_COUNT = 5
+PALM_LOCK_MODELS = {"WPLCK1"}
 
 
 @token_exception_handler
@@ -69,8 +70,15 @@ class WyzeLock(homeassistant.components.lock.LockEntity, ABC):
     def __init__(self, lock_service: LockService, lock: Lock):
         """Initialize a Wyze lock."""
         self._lock = lock
-        if self._lock.type not in [DeviceTypes.LOCK]:
+        _LOGGER.debug(
+            "Initializing Wyze Lock entity: type=%s model=%s, raw=%s",
+            self._lock.type,
+            self._lock.product_model,
+            self._lock.raw_dict,
+        )
+        if self._lock.type not in [DeviceTypes.LOCK] and self._lock.product_model not in PALM_LOCK_MODELS:
             raise AttributeError("Device type not supported")
+        
 
         self._lock_service = lock_service
 
@@ -103,7 +111,12 @@ class WyzeLock(homeassistant.components.lock.LockEntity, ABC):
 
     @token_exception_handler
     async def async_lock(self, **kwargs):
-        _LOGGER.debug("Turning on lock")
+        _LOGGER.debug(
+            "Lock action requested for %s (%s model %s)",
+            self._lock.nickname,
+            self._lock.mac,
+            self._lock.product_model,
+        )
         try:
             await self._lock_service.lock(self._lock)
         except (AccessTokenError, ParameterError, UnknownApiError) as err:
@@ -116,6 +129,12 @@ class WyzeLock(homeassistant.components.lock.LockEntity, ABC):
 
     @token_exception_handler
     async def async_unlock(self, **kwargs):
+        _LOGGER.debug(
+            "Unlock action requested for %s (%s model %s)",
+            self._lock.nickname,
+            self._lock.mac,
+            self._lock.product_model,
+        )
         try:
             await self._lock_service.unlock(self._lock)
         except (AccessTokenError, ParameterError, UnknownApiError) as err:
@@ -140,6 +159,10 @@ class WyzeLock(homeassistant.components.lock.LockEntity, ABC):
         return self._lock.mac
 
     @property
+    def is_palm_lock(self):
+        return self._lock.product_model in PALM_LOCK_MODELS
+
+    @property
     def available(self):
         """Return the connection status of this lock"""
         return self._lock.available
@@ -162,6 +185,12 @@ class WyzeLock(homeassistant.components.lock.LockEntity, ABC):
                 self._lock.raw_dict.get("keypad", {}).get("power")
             )
 
+        if self.is_palm_lock:
+            dev_info["is_palm_lock"] = True
+            for key, value in self._lock.raw_dict.items():
+                if "palm" in key.lower():
+                    dev_info[key] = value
+
         return dev_info
 
     @property
@@ -173,7 +202,23 @@ class WyzeLock(homeassistant.components.lock.LockEntity, ABC):
         """
         This function updates the entity
         """
+        _LOGGER.debug(
+            "Polling update for %s (%s %s)",
+            self._lock.nickname,
+            self._lock.mac,
+            self._lock.product_model,
+        )
         lock = await self._lock_service.update(self._lock)
+        _LOGGER.debug(
+            "Update response for %s: unlocked=%s, door_open=%s, raw_keys=%s",
+            self._lock.mac,
+            lock.unlocked,
+            lock.door_open,
+            ", ".join(
+                [key for key in lock.raw_dict.keys() if "palm" in key.lower()]
+            )
+            or "none",
+        )
         if (
             lock.unlocked == self._lock.unlocked
             or self._out_of_sync_count >= MAX_OUT_OF_SYNC_COUNT
@@ -182,11 +227,22 @@ class WyzeLock(homeassistant.components.lock.LockEntity, ABC):
             self._out_of_sync_count = 0
         else:
             self._out_of_sync_count += 1
+            _LOGGER.debug(
+                "Lock %s out of sync count increased to %s",
+                self._lock.mac,
+                self._out_of_sync_count,
+            )
 
     @callback
     def async_update_callback(self, lock: Lock):
         """Update the switch's state."""
         self._lock = lock
+        _LOGGER.debug(
+            "Async callback for %s: unlocked=%s door_open=%s",
+            self._lock.mac,
+            lock.unlocked,
+            lock.door_open,
+        )
         async_dispatcher_send(
             self.hass,
             f"{LOCK_UPDATED}-{self._lock.mac}",
